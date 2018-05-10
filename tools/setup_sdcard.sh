@@ -1826,7 +1826,7 @@ while [ ! -z "$1" ] ; do
 		gsize=$(echo "$1" | sed -ne 's/^--img-\([[:digit:]]\+\)gb$/\1/p')
 		# --img defaults to --img-2gb
 		gsize=${gsize:-2}
-		imagename=${name%.img}-${gsize}gb.img
+		imagename=${name%.img}.img
 		media="${DIR}/${imagename}"
 		build_img_file="enable"
 		check_root

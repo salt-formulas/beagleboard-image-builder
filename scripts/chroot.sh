@@ -388,12 +388,11 @@ if [ "x${repo_flat}" = "xenable" ] ; then
 	done
 fi
 
-if [ ! "x${repo_nodesource}" = "x" ] ; then
+if [ "$ENABLE_SALT" = true ] ; then
 	echo "" >> ${wfile}
-	echo "deb https://deb.nodesource.com/${repo_nodesource} ${repo_nodesource_dist} main" >> ${wfile}
-	echo "#deb-src https://deb.nodesource.com/${repo_nodesource} ${repo_nodesource_dist} main" >> ${wfile}
+	echo "deb http://repo.saltstack.com/apt/debian/${SALT_RELEASE_NUM}/armhf/${SALT_VERSION} ${SALT_RELEASE_CODE} main" >> ${wfile}
+	sudo cp -v "${OIB_DIR}/target/keyring/repo.saltstack.com.pubkey.asc" "${tempdir}/tmp/saltstack.gpg.key"
 	echo "" >> ${wfile}
-	sudo cp -v "${OIB_DIR}/target/keyring/nodesource.gpg.key" "${tempdir}/tmp/nodesource.gpg.key"
 fi
 
 if [ "x${repo_rcnee}" = "xenable" ] ; then
@@ -527,6 +526,12 @@ cat > "${DIR}/chroot_script.sh" <<-__EOF__
 	export LC_ALL=C
 	export DEBIAN_FRONTEND=noninteractive
 
+	# Salt defaults
+	ENABLE_SALT=${ENABLE_SALT:=false}
+	CONFIGURE_SALT=${CONFIGURE_SALT:=false}
+	PRESEED_SALT=${PRESEED_SALT:=false}
+	APPLY_SALT=${APPLY_SALT:=false}
+
 	dpkg_check () {
 		unset pkg_is_not_installed
 		LC_ALL=C dpkg --list | awk '{print \$2}' | grep "^\${pkg}$" >/dev/null || pkg_is_not_installed="true"
@@ -589,6 +594,10 @@ cat > "${DIR}/chroot_script.sh" <<-__EOF__
 		if [ -f /tmp/nodesource.gpg.key ] ; then
 			apt-key add /tmp/nodesource.gpg.key
 			rm -f /tmp/nodesource.gpg.key || true
+		fi
+		if [ -f /tmp/saltstack.gpg.key ] ; then
+			apt-key add /tmp/saltstack.gpg.key
+			rm -f /tmp/saltstack.gpg.key || true
 		fi
 		if [ "x${repo_rcnee}" = "xenable" ] ; then
 			apt-key add /tmp/repos.rcn-ee.net-archive-keyring.asc
@@ -882,6 +891,38 @@ cat > "${DIR}/chroot_script.sh" <<-__EOF__
 		esac
 	}
 
+	setup_salt () {
+		echo "Log: (chroot): setup_salt"
+		if [ "$ENABLE_SALT" = true ] ; then
+
+			if [ "$CONFIGURE_SALT" = true ] ; then
+				echo "Log: (chroot): configuring salt"
+				echo "master: ${SALT_MASTER}" >> "/etc/salt/minion.d/minion.conf"
+				if [ "$SALT_MINION" != '' ] ; then
+					echo "id: ${SALT_MINION}" >> "/etc/salt/minion.d/minion.conf"
+				fi
+				cat /etc/salt/minion.d/minion.conf
+			fi
+
+			if [ "$PRESEED_SALT" = true ] ; then
+			    echo "Log: (chroot): preseeding salt"
+				mkdir -p "/etc/salt/pki/minion"
+				echo "${SALT_PUB_KEY}" >> "/etc/salt/pki/minion/minion.pub"
+				echo "${SALT_PRIV_KEY}" >> "/etc/salt/pki/minion/minion.pem"
+				cat /etc/salt/pki/minion/minion.pub
+				cat /etc/salt/pki/minion/minion.pem
+			fi
+
+			if [ "$APPLY_SALT" = true ] ; then
+			    echo "Log: (chroot): applying salt"
+				salt-call saltutil.sync_all --log-level info
+				salt-call state.apply --log-level info
+			fi
+
+		fi
+    }
+
+
 	debian_startup_script () {
 		echo "Log: (chroot): debian_startup_script"
 		if [ "x${rfs_startup_scripts}" = "xenable" ] ; then
@@ -1018,6 +1059,8 @@ cat > "${DIR}/chroot_script.sh" <<-__EOF__
 	manual_deborphan
 	add_user
 
+	setup_salt
+
 	mkdir -p /opt/source || true
 	touch /opt/source/list.txt
 
@@ -1032,13 +1075,6 @@ cat > "${DIR}/chroot_script.sh" <<-__EOF__
 		fi
 	else
 		dpkg_package_missing
-	fi
-
-	pkg="c9-core-installer"
-	dpkg_check
-
-	if [ "x\${pkg_is_not_installed}" = "x" ] ; then
-		apt-mark hold c9-core-installer || true
 	fi
 
 	if [ -f /lib/systemd/systemd ] ; then

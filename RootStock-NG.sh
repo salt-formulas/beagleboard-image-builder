@@ -107,7 +107,7 @@ check_project_config () {
 	project_config=$(echo ${project_config} | awk -F ".conf" '{print $1}')
 	if [ -f ${DIR}/configs/${project_config}.conf ] ; then
 		. <(m4 -P ${DIR}/configs/${project_config}.conf)
-		export_filename="${deb_distribution}-${release}-${image_type}-${deb_arch}-${time}"
+		export_filename="${export_filename}"
 
 		# for automation
 		echo "${export_filename}" > ${DIR}/latest_version

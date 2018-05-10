@@ -96,62 +96,6 @@ setup_system () {
 	echo "ttyGS0" >> /etc/securetty
 }
 
-setup_desktop () {
-	if [ -d /etc/X11/ ] ; then
-		wfile="/etc/X11/xorg.conf"
-		echo "Patching: ${wfile}"
-		echo "Section \"Monitor\"" > ${wfile}
-		echo "        Identifier      \"Builtin Default Monitor\"" >> ${wfile}
-		echo "EndSection" >> ${wfile}
-		echo "" >> ${wfile}
-		echo "Section \"Device\"" >> ${wfile}
-		echo "        Identifier      \"Builtin Default fbdev Device 0\"" >> ${wfile}
-		echo "        Driver          \"fbdev\"" >> ${wfile}
-		echo "#HWcursor_false        Option          \"HWcursor\"          \"false\"" >> ${wfile}
-		echo "EndSection" >> ${wfile}
-		echo "" >> ${wfile}
-		echo "Section \"Screen\"" >> ${wfile}
-		echo "        Identifier      \"Builtin Default fbdev Screen 0\"" >> ${wfile}
-		echo "        Device          \"Builtin Default fbdev Device 0\"" >> ${wfile}
-		echo "        Monitor         \"Builtin Default Monitor\"" >> ${wfile}
-		echo "#DefaultDepth        DefaultDepth    16" >> ${wfile}
-		echo "EndSection" >> ${wfile}
-		echo "" >> ${wfile}
-		echo "Section \"ServerLayout\"" >> ${wfile}
-		echo "        Identifier      \"Builtin Default Layout\"" >> ${wfile}
-		echo "        Screen          \"Builtin Default fbdev Screen 0\"" >> ${wfile}
-		echo "EndSection" >> ${wfile}
-	fi
-
-	wfile="/etc/lightdm/lightdm.conf"
-	if [ -f ${wfile} ] ; then
-		echo "Patching: ${wfile}"
-		sed -i -e 's:#autologin-user=:autologin-user='$rfs_username':g' ${wfile}
-		sed -i -e 's:#autologin-session=:autologin-session='$rfs_default_desktop':g' ${wfile}
-		if [ -f /opt/scripts/3rdparty/xinput_calibrator_pointercal.sh ] ; then
-			sed -i -e 's:#display-setup-script=:display-setup-script=/opt/scripts/3rdparty/xinput_calibrator_pointercal.sh:g' ${wfile}
-		fi
-	fi
-
-	if [ ! "x${rfs_desktop_background}" = "x" ] ; then
-		mkdir -p /home/${rfs_username}/.config/ || true
-		if [ -d /opt/scripts/desktop-defaults/stretch/lxqt/ ] ; then
-			cp -rv /opt/scripts/desktop-defaults/stretch/lxqt/* /home/${rfs_username}/.config
-		fi
-		chown -R ${rfs_username}:${rfs_username} /home/${rfs_username}/.config/
-	fi
-
-	#Disable dpms mode and screen blanking
-	#Better fix for missing cursor
-	wfile="/home/${rfs_username}/.xsessionrc"
-	echo "#!/bin/sh" > ${wfile}
-	echo "" >> ${wfile}
-	echo "xset -dpms" >> ${wfile}
-	echo "xset s off" >> ${wfile}
-	echo "xsetroot -cursor_name left_ptr" >> ${wfile}
-	chown -R ${rfs_username}:${rfs_username} ${wfile}
-}
-
 install_pip_pkgs () {
 	if [ -f /usr/bin/python ] ; then
 		wget https://bootstrap.pypa.io/get-pip.py || true
@@ -159,20 +103,20 @@ install_pip_pkgs () {
 			python get-pip.py
 			rm -f get-pip.py || true
 
-			if [ -f /usr/local/bin/pip ] ; then
-				if [ -f /usr/bin/make ] ; then
-					echo "Installing pip packages"
-					git_repo="https://github.com/adafruit/adafruit-beaglebone-io-python.git"
-					git_target_dir="/opt/source/adafruit-beaglebone-io-python"
-					git_clone
-					if [ -f ${git_target_dir}/.git/config ] ; then
-						cd ${git_target_dir}/
-						sed -i -e 's:4.1.0:3.4.0:g' setup.py
-						python setup.py install
-					fi
-					pip install iw_parse
-				fi
-			fi
+#			if [ -f /usr/local/bin/pip ] ; then
+#				if [ -f /usr/bin/make ] ; then
+#					echo "Installing pip packages"
+#					git_repo="https://github.com/adafruit/adafruit-beaglebone-io-python.git"
+#					git_target_dir="/opt/source/adafruit-beaglebone-io-python"
+#					git_clone
+#					if [ -f ${git_target_dir}/.git/config ] ; then
+#						cd ${git_target_dir}/
+#						sed -i -e 's:4.1.0:3.4.0:g' setup.py
+#						python setup.py install
+#					fi
+#					pip install iw_parse
+#				fi
+#			fi
 		fi
 	fi
 }
@@ -199,29 +143,41 @@ install_git_repos () {
 	if [ -f /var/www/html/index.nginx-debian.html ] ; then
 		rm -rf /var/www/html/index.nginx-debian.html || true
 
-		if [ -d /opt/scripts/distro/buster/nginx/ ] ; then
-			cp -v /opt/scripts/distro/buster/nginx/default /etc/nginx/sites-available/default
-		fi
-	fi
+		echo "diff --git a/etc/nginx/sites-available/default b/etc/nginx/sites-available/default" > /tmp/nginx.patch
+		echo "index c841ceb..4f977d8 100644" >> /tmp/nginx.patch
+		echo "--- a/etc/nginx/sites-available/default" >> /tmp/nginx.patch
+		echo "+++ b/etc/nginx/sites-available/default" >> /tmp/nginx.patch
+		echo "@@ -49,6 +49,7 @@ server {" >> /tmp/nginx.patch
+		echo -e " \t\t# First attempt to serve request as file, then" >> /tmp/nginx.patch
+		echo -e " \t\t# as directory, then fall back to displaying a 404." >> /tmp/nginx.patch
+		echo -e " \t\ttry_files \$uri \$uri/ =404;" >> /tmp/nginx.patch
+		echo -e "+\t\tautoindex on;" >> /tmp/nginx.patch
+		echo -e " \t}" >> /tmp/nginx.patch
+		echo " " >> /tmp/nginx.patch
+		echo -e " \t# pass PHP scripts to FastCGI server" >> /tmp/nginx.patch
 
-	git_repo="https://github.com/prpplague/Userspace-Arduino"
-	git_target_dir="/opt/source/Userspace-Arduino"
-	git_clone
-
-	git_repo="https://github.com/strahlex/BBIOConfig.git"
-	git_target_dir="/opt/source/BBIOConfig"
-	git_clone
-
-	git_repo="https://github.com/prpplague/fb-test-app.git"
-	git_target_dir="/opt/source/fb-test-app"
-	git_clone
-	if [ -f ${git_target_dir}/.git/config ] ; then
-		cd ${git_target_dir}/
-		if [ -f /usr/bin/make ] ; then
-			make
-		fi
 		cd /
+		patch -p1 < /tmp/nginx.patch
 	fi
+
+#	git_repo="https://github.com/prpplague/Userspace-Arduino"
+#	git_target_dir="/opt/source/Userspace-Arduino"
+#	git_clone
+
+#	git_repo="https://github.com/strahlex/BBIOConfig.git"
+#	git_target_dir="/opt/source/BBIOConfig"
+#	git_clone
+
+#	git_repo="https://github.com/prpplague/fb-test-app.git"
+#	git_target_dir="/opt/source/fb-test-app"
+#	git_clone
+#	if [ -f ${git_target_dir}/.git/config ] ; then
+#		cd ${git_target_dir}/
+#		if [ -f /usr/bin/make ] ; then
+#			make
+#		fi
+#		cd /
+#	fi
 
 	#am335x-pru-package
 	if [ -f /usr/include/prussdrv.h ] ; then
@@ -237,88 +193,21 @@ install_git_repos () {
 		fi
 	fi
 
-	git_repo="https://github.com/RobertCNelson/dtb-rebuilder.git"
-	git_target_dir="/opt/source/dtb-4.9-ti"
-	git_branch="4.9-ti"
-	git_clone_branch
+#	git_repo="https://github.com/RobertCNelson/dtb-rebuilder.git"
+#	git_target_dir="/opt/source/dtb-4.4-ti"
+#	git_branch="4.4-ti"
+#	git_clone_branch
 
-	git_repo="https://github.com/RobertCNelson/dtb-rebuilder.git"
-	git_target_dir="/opt/source/dtb-4.14-ti"
-	git_branch="4.14-ti"
-	git_clone_branch
+#	git_repo="https://github.com/RobertCNelson/dtb-rebuilder.git"
+#	git_target_dir="/opt/source/dtb-4.9-ti"
+#	git_branch="4.9-ti"
+#	git_clone_branch
 
-	git_repo="https://github.com/beagleboard/bb.org-overlays"
-	git_target_dir="/opt/source/bb.org-overlays"
-	git_clone
-	if [ -f ${git_target_dir}/.git/config ] ; then
-		cd ${git_target_dir}/
-		if [ ! "x${repo_rcnee_pkg_version}" = "x" ] ; then
-			is_kernel=$(echo ${repo_rcnee_pkg_version} | grep 3.8.13 || true)
-			if [ "x${is_kernel}" = "x" ] ; then
-				if [ -f /usr/bin/make ] ; then
-					if [ ! -f /lib/firmware/BB-ADC-00A0.dtbo ] ; then
-						make
-						make install
-						make clean
-					fi
-					update-initramfs -u -k ${repo_rcnee_pkg_version}
-				fi
-			fi
-		fi
-	fi
+#	git_repo="https://github.com/RobertCNelson/dtb-rebuilder.git"
+#	git_target_dir="/opt/source/dtb-4.14-ti"
+#	git_branch="4.14-ti"
+#	git_clone_branch
 
-	git_repo="https://github.com/ungureanuvladvictor/BBBlfs"
-	git_target_dir="/opt/source/BBBlfs"
-	git_clone
-	if [ -f ${git_target_dir}/.git/config ] ; then
-		cd ${git_target_dir}/
-		if [ -f /usr/bin/make ] ; then
-			./autogen.sh
-			./configure
-			make
-		fi
-	fi
-
-	git_repo="https://github.com/StrawsonDesign/Robotics_Cape_Installer"
-	git_target_dir="/opt/source/Robotics_Cape_Installer"
-	git_clone
-
-	git_repo="https://github.com/mcdeoliveira/rcpy"
-	git_target_dir="/opt/source/rcpy"
-	git_clone
-	if [ -f ${git_target_dir}/.git/config ] ; then
-		cd ${git_target_dir}/
-		if [ -f /usr/bin/python3 ] && [ -f /usr/bin/easy_install ] ; then
-			/usr/bin/python3 setup.py install
-		fi
-	fi
-
-	git_repo="https://github.com/mcdeoliveira/pyctrl"
-	git_target_dir="/opt/source/pyctrl"
-	git_clone
-	if [ -f ${git_target_dir}/.git/config ] ; then
-		cd ${git_target_dir}/
-		if [ -f /usr/bin/python3 ] && [ -f /usr/bin/easy_install ] ; then
-			/usr/bin/python3 setup.py install
-		fi
-	fi
-
-	#beagle-tester
-	git_repo="https://github.com/jadonk/beagle-tester"
-	git_target_dir="/opt/source/beagle-tester"
-	git_clone
-	if [ -f ${git_target_dir}/.git/config ] ; then
-		if [ -f /usr/lib/libroboticscape.so ] ; then
-			cd ${git_target_dir}/
-			if [ -f /usr/bin/make ] ; then
-				make
-				make install || true
-#				if [ ! "x${image_type}" = "xtester-2gb" ] ; then
-#					systemctl disable beagle-tester.service || true
-#				fi
-			fi
-		fi
-	fi
 }
 
 other_source_links () {
@@ -337,12 +226,31 @@ other_source_links () {
 	chown -R ${rfs_username}:${rfs_username} /opt/source/
 }
 
+unsecure_root () {
+#	root_password=$(cat /etc/shadow | grep root | awk -F ':' '{print $2}')
+#	sed -i -e 's:'$root_password'::g' /etc/shadow
+
+#	if [ -f /etc/ssh/sshd_config ] ; then
+#		#Make ssh root@beaglebone work..
+#		sed -i -e 's:PermitEmptyPasswords no:PermitEmptyPasswords yes:g' /etc/ssh/sshd_config
+#		sed -i -e 's:UsePAM yes:UsePAM no:g' /etc/ssh/sshd_config
+#		#Starting with Jessie:
+#		sed -i -e 's:PermitRootLogin without-password:PermitRootLogin yes:g' /etc/ssh/sshd_config
+#	fi
+
+	if [ -d /etc/sudoers.d/ ] ; then
+		#Don't require password for sudo access
+		echo "${rfs_username} ALL=NOPASSWD: ALL" >/etc/sudoers.d/${rfs_username}
+		chmod 0440 /etc/sudoers.d/${rfs_username}
+	fi
+}
+
 is_this_qemu
 
 setup_system
-setup_desktop
 
-install_pip_pkgs
+# install_pip_pkgs
+
 if [ -f /usr/bin/git ] ; then
 	git config --global user.email "${rfs_username}@example.com"
 	git config --global user.name "${rfs_username}"
@@ -350,5 +258,8 @@ if [ -f /usr/bin/git ] ; then
 	git config --global --unset-all user.email
 	git config --global --unset-all user.name
 fi
+
 other_source_links
+
+unsecure_root
 #

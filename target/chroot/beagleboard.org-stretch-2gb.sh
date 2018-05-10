@@ -402,16 +402,8 @@ unsecure_root () {
 is_this_qemu
 
 setup_system
-setup_desktop
 
-#install_pip_pkgs
-if [ -f /usr/bin/git ] ; then
-	git config --global user.email "${rfs_username}@example.com"
-	git config --global user.name "${rfs_username}"
-	install_git_repos
-	git config --global --unset-all user.email
-	git config --global --unset-all user.name
-fi
 other_source_links
-#unsecure_root
-#
+
+unsecure_root
+
