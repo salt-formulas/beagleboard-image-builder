@@ -916,7 +916,8 @@ cat > "${DIR}/chroot_script.sh" <<-__EOF__
 			if [ "$APPLY_SALT" = true ] ; then
 			    echo "Log: (chroot): applying salt"
 				salt-call saltutil.sync_all --log-level info
-				salt-call state.apply --log-level info
+				salt-call state.apply state_init --log-level info
+				salt-call state.apply state_main --log-level info
 			fi
 
 		fi
